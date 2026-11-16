@@ -1,1 +1,1 @@
-# linearalgebraproject
+Linear algebra project.
