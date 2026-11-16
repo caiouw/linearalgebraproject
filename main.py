@@ -13,7 +13,7 @@ import numpy as np
 
 from meal_planner import linalg
 from meal_planner.data import DEFAULT_FOODS, DEPENDENT_FOODS, FOODS, NUTRIENTS, STUDENTS
-from meal_planner.planner import build_system, plan_for_students, plan_meal
+from meal_planner.planner import build_system, plan_for_students, plan_meal, target_warning
 
 np.set_printoptions(precision=3, suppress=True)
 
@@ -23,6 +23,8 @@ def heading(text):
 
 
 def print_plan(food_names, result):
+    if result.get("warning"):
+        print(f"WARNING: {result['warning']}\n")
     print(f"det(A) = {result['det']:,.2f}   rank(A) = {result['rank']}   "
           f"solutions: {result['kind']}")
     if result["kind"] != linalg.UNIQUE:
@@ -134,7 +136,15 @@ def interactive():
             pass
         print("  Please enter 3 different numbers from the list.")
     chosen = [names[i] for i in idx]
-    target = [ask_number(f"Target {n}: ") for n in NUTRIENTS]
+    while True:
+        target = [ask_number(f"Target {n}: ") for n in NUTRIENTS]
+        warning = target_warning(target)
+        if warning is None:
+            break
+        print(f"\n  WARNING: {warning}")
+        if input("  Enter a different target? (y/n): ").strip().lower() not in ("y", "yes"):
+            break
+        print()
     budget = ask_number("Budget (₱): ")
     heading("Your meal plan")
     print_plan(chosen, plan_meal(chosen, target, budget))

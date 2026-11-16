@@ -28,10 +28,10 @@ python -m unittest discover tests
 |---|---|
 | `meal_planner/data.py` | Food nutrients and prices, student targets and budgets |
 | `meal_planner/linalg.py` | Hand-written cofactor determinant, Gauss-Jordan, rank, Cramer's rule, inverse |
-| `meal_planner/planner.py` | Builds A, b, c from the data; judges feasibility and budget |
+| `meal_planner/planner.py` | Builds A, b, c from the data; warns about impossible targets; judges feasibility and budget |
 | `meal_planner/plots.py` | Figure 1 (linear combination bars) and Figure 2 (span plane) |
 | `main.py` | Command-line report and interactive mode |
-| `tests/test_meal_planner.py` | 13 checks against NumPy and between methods |
+| `tests/test_meal_planner.py` | 17 checks against NumPy, between methods, and of the target warning |
 
 ## What each part shows
 

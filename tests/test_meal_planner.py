@@ -8,7 +8,7 @@ import numpy as np
 
 from meal_planner import linalg
 from meal_planner.data import DEFAULT_FOODS, DEPENDENT_FOODS, STUDENTS
-from meal_planner.planner import build_system, plan_for_students, plan_meal
+from meal_planner.planner import build_system, plan_for_students, plan_meal, target_warning
 
 
 class TestLinearAlgebra(unittest.TestCase):
@@ -74,6 +74,25 @@ class TestPlanner(unittest.TestCase):
         result = plan_meal(DEFAULT_FOODS, [600, 25, 80], budget=80)
         self.assertAlmostEqual(result["cost"], float(result["c"] @ result["x"]))
         self.assertEqual(result["verdict"], "OK")
+
+    def test_impossible_target_warns(self):
+        # 4 x (100 + 100) = 800 kcal > 700 kcal
+        self.assertIn("Impossible target", target_warning((700, 100, 100)))
+        self.assertIsNotNone(plan_meal(DEFAULT_FOODS, (700, 100, 100))["warning"])
+
+    def test_negative_target_warns(self):
+        self.assertIsNotNone(target_warning((600, -5, 80)))
+
+    def test_realistic_targets_do_not_warn(self):
+        for s, values in STUDENTS.items():
+            self.assertIsNone(target_warning(values[:3]), s)
+        self.assertIsNone(target_warning((700, 40, 80)))
+
+    def test_every_food_passes_its_own_check(self):
+        # A real food must never be flagged as impossible.
+        from meal_planner.data import FOODS
+        for name, values in FOODS.items():
+            self.assertIsNone(target_warning(values[:3]), name)
 
     def test_unknown_food(self):
         with self.assertRaises(KeyError):

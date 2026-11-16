@@ -15,6 +15,28 @@ def build_system(food_names, foods=FOODS):
     return A, c
 
 
+KCAL_PER_GRAM = 4      # protein and carbohydrate each give about 4 kcal per gram
+LABEL_ALLOWANCE = 1.10 # food labels round, and fibre counts as carbs but gives fewer kcal
+
+
+def target_warning(target):
+    """Return a warning if no real food could ever meet this target, else None.
+
+    Protein and carbs alone supply 4(P + C) kcal, and fat can only add more, so a
+    target whose calories are below 4(P + C) is impossible whatever foods are chosen.
+    """
+    kcal, protein, carbs = (float(v) for v in target)
+    if min(kcal, protein, carbs) < 0:
+        return "Targets cannot be negative."
+    minimum = KCAL_PER_GRAM * (protein + carbs)
+    if minimum > LABEL_ALLOWANCE * kcal:
+        return (f"Impossible target: {protein:g} g protein + {carbs:g} g carbs already give "
+                f"4 x ({protein:g} + {carbs:g}) = {minimum:.0f} kcal, more than your "
+                f"{kcal:g} kcal target. No combination of real foods can do this. "
+                f"Raise calories to at least {minimum:.0f} kcal or lower protein/carbs.")
+    return None
+
+
 def judge(x, c, budget=None):
     """Cost is the dot product c . x; a plan with a negative serving cannot be eaten."""
     cost = float(c @ x)
@@ -34,6 +56,7 @@ def plan_meal(food_names, target, budget=None, foods=FOODS):
     result = linalg.solve(A, b)
     result["det"] = linalg.det_cofactor(A)
     result["A"], result["b"], result["c"] = A, b, c
+    result["warning"] = target_warning(b)
     if result["kind"] == linalg.UNIQUE:
         result["cost"], result["verdict"] = judge(result["x"], c, budget)
     else:
