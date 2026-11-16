@@ -16,6 +16,20 @@ There are two versions with the same maths:
 3. *Runtime → Run all*.
 4. To try your own meal, scroll to **Section 10**, change the foods, target and budget, and run that cell.
 
+## Run the Python program in Google Colab
+
+Open a new notebook in Colab and run these in a cell, one line at a time or all together:
+
+```
+!git clone https://github.com/caiouw/linearalgebraproject.git
+%cd linearalgebraproject
+%run main.py --report
+```
+
+* `%run main.py --plan` plans your own meal (Colab shows a box to type your answers in).
+* `!python -m unittest discover tests` runs the 22 checks.
+* The figures are saved in `linearalgebraproject/figures` (open the folder icon on the left).
+
 ## Run on your computer (Windows)
 
 1. Open the project folder in File Explorer, right-click an empty space, choose **Open in Terminal**.

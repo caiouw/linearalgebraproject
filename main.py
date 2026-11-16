@@ -206,7 +206,8 @@ def plan_your_meal():
 # ---------------------------------------------------------------- start here
 
 def main():
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # so the ₱ sign prints on Windows
+    if hasattr(sys.stdout, "reconfigure"):  # so the ₱ sign prints in the Windows terminal
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Plan a meal by solving Ax = b.")
     parser.add_argument("--plan", "--interactive", dest="plan", action="store_true",
                         help="plan your own meal")
