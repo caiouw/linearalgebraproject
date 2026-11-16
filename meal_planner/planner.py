@@ -57,6 +57,7 @@ def plan_meal(food_names, target, budget=None, foods=FOODS):
     result["det"] = linalg.det_cofactor(A)
     result["A"], result["b"], result["c"] = A, b, c
     result["warning"] = target_warning(b)
+    result["budget"] = budget
     if result["kind"] == linalg.UNIQUE:
         result["cost"], result["verdict"] = judge(result["x"], c, budget)
     else:

@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from meal_planner import linalg
+from meal_planner import explain, linalg
 from meal_planner.data import DEFAULT_FOODS, DEPENDENT_FOODS, STUDENTS
 from meal_planner.planner import build_system, plan_for_students, plan_meal, target_warning
 
@@ -97,6 +97,28 @@ class TestPlanner(unittest.TestCase):
     def test_unknown_food(self):
         with self.assertRaises(KeyError):
             build_system(["Pizza", "Egg (1 large)", "Milk (1 cup)"])
+
+
+class TestPlainLanguage(unittest.TestCase):
+    """The plain-language story must match the maths result."""
+
+    def story(self, foods, target, budget):
+        return explain.story(foods, plan_meal(foods, target, budget))
+
+    def test_good_plan(self):
+        self.assertIn("fits your ₱80 budget", self.story(DEFAULT_FOODS, (600, 25, 80), 80))
+
+    def test_negative_servings(self):
+        self.assertIn("NOT POSSIBLE", self.story(DEFAULT_FOODS, (700, 10, 140), 60))
+
+    def test_over_budget(self):
+        self.assertIn("more than your ₱30 budget", self.story(DEFAULT_FOODS, (900, 45, 110), 30))
+
+    def test_dependent_no_plan(self):
+        self.assertIn("There is NO plan", self.story(DEPENDENT_FOODS, (600, 25, 80), 80))
+
+    def test_dependent_many_plans(self):
+        self.assertIn("MANY different ways", self.story(DEPENDENT_FOODS, (575, 39.6, 89), 80))
 
 
 if __name__ == "__main__":
