@@ -1,35 +1,32 @@
-"""Turns food data into the system Ax = b and judges the resulting meal plan."""
+"""Turns the food data into Ax = b and judges the meal plan."""
 import numpy as np
 
 from . import linalg
 from .data import FOODS
 
 
-def build_system(food_names, foods=FOODS):
-    """Columns of A are the food nutrient vectors a_j; c is the price vector."""
-    missing = [f for f in food_names if f not in foods]
-    if missing:
-        raise KeyError(f"Unknown food(s): {', '.join(missing)}")
-    A = np.array([foods[f][:3] for f in food_names], dtype=float).T  # foods -> columns
-    c = np.array([foods[f][3] for f in food_names], dtype=float)
+def build_system(food_names):
+    """A has one column per food (its nutrient vector); c holds the prices."""
+    for name in food_names:
+        if name not in FOODS:
+            raise KeyError(f"Unknown food: {name}")
+    A = np.array([FOODS[name][:3] for name in food_names], dtype=float).T
+    c = np.array([FOODS[name][3] for name in food_names], dtype=float)
     return A, c
 
 
-KCAL_PER_GRAM = 4      # protein and carbohydrate each give about 4 kcal per gram
-LABEL_ALLOWANCE = 1.10 # food labels round, and fibre counts as carbs but gives fewer kcal
-
-
 def target_warning(target):
-    """Return a warning if no real food could ever meet this target, else None.
+    """Warn if no real foods could ever reach this target.
 
-    Protein and carbs alone supply 4(P + C) kcal, and fat can only add more, so a
-    target whose calories are below 4(P + C) is impossible whatever foods are chosen.
+    Protein and carbs each give about 4 kcal per gram, so a meal has at least
+    4 x (protein + carbs) kcal. We allow 10% because labels round and fibre
+    counts as carbs but gives fewer kcal.
     """
-    kcal, protein, carbs = (float(v) for v in target)
-    if min(kcal, protein, carbs) < 0:
+    kcal, protein, carbs = target
+    if kcal < 0 or protein < 0 or carbs < 0:
         return "Targets cannot be negative."
-    minimum = KCAL_PER_GRAM * (protein + carbs)
-    if minimum > LABEL_ALLOWANCE * kcal:
+    minimum = 4 * (protein + carbs)
+    if minimum > 1.10 * kcal:
         return (f"Impossible target: {protein:g} g protein + {carbs:g} g carbs already give "
                 f"4 x ({protein:g} + {carbs:g}) = {minimum:.0f} kcal, more than your "
                 f"{kcal:g} kcal target. No combination of real foods can do this. "
@@ -37,44 +34,44 @@ def target_warning(target):
     return None
 
 
-def judge(x, c, budget=None):
-    """Cost is the dot product c . x; a plan with a negative serving cannot be eaten."""
-    cost = float(c @ x)
+def verdict(x, cost, budget):
+    """Can the plan actually be eaten, and is it affordable?"""
     if np.any(x < -linalg.TOL):
-        verdict = "Not feasible (negative servings)"
-    elif budget is not None and cost > budget + linalg.TOL:
-        verdict = "Over budget"
-    else:
-        verdict = "OK"
-    return cost, verdict
+        return "Not feasible (negative servings)"
+    if budget is not None and cost > budget:
+        return "Over budget"
+    return "OK"
 
 
-def plan_meal(food_names, target, budget=None, foods=FOODS):
-    """Plan one meal. Returns a dict with det, the solve() result, cost and verdict."""
-    A, c = build_system(food_names, foods)
-    b = np.asarray(target, dtype=float)
+def plan_meal(food_names, target, budget=None):
+    """Plan one meal: solve Ax = b, then work out the cost c . x."""
+    A, c = build_system(food_names)
+    b = np.array(target, dtype=float)
     result = linalg.solve(A, b)
-    result["det"] = linalg.det_cofactor(A)
-    result["A"], result["b"], result["c"] = A, b, c
-    result["warning"] = target_warning(b)
-    result["budget"] = budget
-    if result["kind"] == linalg.UNIQUE:
-        result["cost"], result["verdict"] = judge(result["x"], c, budget)
+    result.update(A=A, b=b, c=c, budget=budget,
+                  det=linalg.det3(A), warning=target_warning(target))
+    if result["kind"] == "unique":
+        result["cost"] = c @ result["x"]
+        result["verdict"] = verdict(result["x"], result["cost"], budget)
     else:
-        result["cost"], result["verdict"] = None, "No unique plan"
+        result["cost"] = None
+        result["verdict"] = "No unique plan"
     return result
 
 
-def plan_for_students(food_names, students, foods=FOODS):
+def plan_for_students(food_names, students):
     """Plan for every student at once: X = A^-1 B, one column of B per student."""
-    A, c = build_system(food_names, foods)
+    A, c = build_system(food_names)
     names = list(students)
     B = np.array([students[s][:3] for s in names], dtype=float).T
     A_inv = linalg.inverse(A)
     X = A_inv @ B
+
     rows = []
-    for k, s in enumerate(names):
-        cost, verdict = judge(X[:, k], c, students[s][3])
-        rows.append({"student": s, "x": X[:, k], "cost": cost,
-                     "budget": students[s][3], "verdict": verdict})
+    for k, name in enumerate(names):
+        x = X[:, k]
+        cost = c @ x
+        budget = students[name][3]
+        rows.append({"student": name, "x": x, "cost": cost, "budget": budget,
+                     "verdict": verdict(x, cost, budget)})
     return A, A_inv, B, X, rows

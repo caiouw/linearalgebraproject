@@ -1,112 +1,108 @@
-"""Hand-written linear algebra used by the planner (Lessons 1-4).
-
-NumPy is used only to store arrays; every algorithm here is written out by hand.
-"""
+"""The linear algebra behind the planner, written out by hand (Lessons 1-4)."""
 import numpy as np
 
-TOL = 1e-9  # numbers smaller than this are treated as zero
+TOL = 1e-9  # numbers closer to 0 than this count as 0
 
 
-def det_cofactor(M):
-    """Determinant by cofactor expansion along the first row (Lesson 3).
+def det2(M):
+    """Determinant of a 2x2 matrix: ad - bc."""
+    return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
 
-    det(A) = sum_j (-1)^(1+j) a_1j det(M_1j), where M_1j is A without row 1 and column j.
+
+def det3(A):
+    """Determinant of a 3x3 matrix by cofactor expansion along row 1 (Lesson 3).
+
+    det(A) = a11*det(M11) - a12*det(M12) + a13*det(M13)
     """
-    M = np.asarray(M, dtype=float)
-    n = M.shape[0]
-    if n == 1:
-        return M[0, 0]
-    if n == 2:
-        return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]  # ad - bc
-    total = 0.0
-    for j in range(n):
-        minor = np.delete(np.delete(M, 0, axis=0), j, axis=1)
-        total += (-1) ** j * M[0, j] * det_cofactor(minor)  # (-1)^(1+j) with 0-based j
-    return total
+    A = np.asarray(A, dtype=float)
+    M11 = A[1:, [1, 2]]  # A without row 1 and column 1
+    M12 = A[1:, [0, 2]]  # A without row 1 and column 2
+    M13 = A[1:, [0, 1]]  # A without row 1 and column 3
+    return A[0, 0] * det2(M11) - A[0, 1] * det2(M12) + A[0, 2] * det2(M13)
 
 
-def gauss_jordan(M, n_coef_cols=None):
-    """Reduce M to reduced row echelon form with elementary row operations (Lesson 2).
+def gauss_jordan(M, n):
+    """Row-reduce M to reduced row echelon form (Lesson 2).
 
-    Only the first n_coef_cols columns may hold pivots, so the right-hand side of
-    [A | b] or [A | I] is never used as a pivot column.
-
-    Returns (rref, pivot_columns, steps) where steps describes each row operation.
+    n is the number of unknowns: only the first n columns get a leading 1.
+    Returns the RREF, the pivot columns, and a list of the row operations used.
     """
     M = np.array(M, dtype=float)
-    rows, cols = M.shape
-    n_coef_cols = cols if n_coef_cols is None else n_coef_cols
-    pivots, steps, r = [], [], 0
-    for col in range(n_coef_cols):
-        if r == rows:
-            break
-        p = r + int(np.argmax(np.abs(M[r:, col])))  # largest pivot limits rounding error
-        if abs(M[p, col]) < TOL:
-            continue  # no pivot in this column: free variable
-        if p != r:
-            M[[r, p]] = M[[p, r]]
-            steps.append(f"Type I:   R{r+1} <-> R{p+1}")
-        piv = M[r, col]
-        M[r] = M[r] / piv
-        steps.append(f"Type II:  R{r+1} <- (1/{piv:.4g}) R{r+1}")
-        for i in range(rows):
-            if i != r and abs(M[i, col]) > TOL:
-                f = M[i, col]
-                M[i] = M[i] - f * M[r]
-                steps.append(f"Type III: R{i+1} <- R{i+1} - ({f:.4g}) R{r+1}")
+    pivots, steps = [], []
+    row = 0
+    for col in range(n):
+        # find a row (from `row` down) with a nonzero entry in this column
+        candidates = [r for r in range(row, len(M)) if abs(M[r, col]) > TOL]
+        if not candidates:
+            continue  # no leading 1 in this column: a free variable
+
+        r = candidates[0]
+        if r != row:  # Type I: swap two rows
+            M[[row, r]] = M[[r, row]]
+            steps.append(f"Type I:   swap R{row+1} and R{r+1}")
+
+        value = M[row, col]  # Type II: divide the row to get a leading 1
+        M[row] = M[row] / value
+        steps.append(f"Type II:  R{row+1} = R{row+1} / {value:.4g}")
+
+        for i in range(len(M)):  # Type III: clear the rest of the column
+            if i != row and abs(M[i, col]) > TOL:
+                factor = M[i, col]
+                M[i] = M[i] - factor * M[row]
+                steps.append(f"Type III: R{i+1} = R{i+1} - ({factor:.4g}) R{row+1}")
+
         pivots.append(col)
-        r += 1
+        row += 1
+        if row == len(M):
+            break
+
     M[np.abs(M) < TOL] = 0.0
     return M, pivots, steps
 
 
 def rank(A):
-    """Rank = number of pivots in the RREF (Lesson 4)."""
-    return len(gauss_jordan(A)[1])
+    """Rank = number of leading 1s in the RREF (Lesson 4)."""
+    A = np.asarray(A, dtype=float)
+    return len(gauss_jordan(A, A.shape[1])[1])
+
+
+def solve(A, b):
+    """Solve Ax = b with Gauss-Jordan on [A | b] and say what kind of answer it has."""
+    A = np.asarray(A, dtype=float)
+    n = A.shape[1]
+    R, pivots, steps = gauss_jordan(np.column_stack([A, b]), n)
+
+    # a row [0 0 0 | nonzero] means 0 = nonzero: impossible
+    impossible = any(np.all(row[:n] == 0) and row[n] != 0 for row in R)
+    if impossible:
+        kind = "none"
+    elif len(pivots) == n:
+        kind = "unique"
+    else:
+        kind = "infinitely many"
+
+    x = R[:n, n] if kind == "unique" else None
+    return {"kind": kind, "x": x, "rank": len(pivots), "rref": R, "steps": steps}
 
 
 def cramer(A, b):
     """Cramer's rule: x_i = det(A_i) / det(A), A_i = A with column i replaced by b (Lesson 3)."""
     A = np.asarray(A, dtype=float)
-    dA = det_cofactor(A)
-    if abs(dA) < TOL:
-        raise ValueError("det(A) = 0: Cramer's rule does not apply.")
-    x = np.zeros(len(b))
-    for i in range(len(b)):
+    d = det3(A)
+    if abs(d) < TOL:
+        raise ValueError("det(A) = 0, so Cramer's rule cannot be used.")
+    x = np.zeros(3)
+    for i in range(3):
         Ai = A.copy()
         Ai[:, i] = b
-        x[i] = det_cofactor(Ai) / dA
+        x[i] = det3(Ai) / d
     return x
 
 
 def inverse(A):
     """Inverse by row-reducing [A | I] to [I | A^-1] (Lesson 2)."""
     A = np.asarray(A, dtype=float)
-    n = A.shape[0]
-    R, pivots, _ = gauss_jordan(np.hstack([A, np.eye(n)]), n_coef_cols=n)
-    if len(pivots) < n:
-        raise ValueError("A is singular: it has no inverse.")
-    return R[:, n:]
-
-
-UNIQUE, INFINITE, NONE = "unique", "infinitely many", "none"
-
-
-def solve(A, b):
-    """Solve Ax = b by Gauss-Jordan and classify the solution set.
-
-    Returns a dict with keys: kind (UNIQUE / INFINITE / NONE), x (the solution when
-    unique, else None), rank, rref, steps.
-    """
-    A = np.asarray(A, dtype=float)
-    R, pivots, steps = gauss_jordan(np.column_stack([A, b]), n_coef_cols=A.shape[1])
-    r = len(pivots)
-    inconsistent = any(np.all(np.abs(row[:-1]) < TOL) and abs(row[-1]) > TOL for row in R)
-    if inconsistent:
-        kind = NONE
-    elif r == A.shape[1]:
-        kind = UNIQUE
-    else:
-        kind = INFINITE
-    x = R[: A.shape[1], -1].copy() if kind == UNIQUE else None
-    return {"kind": kind, "x": x, "rank": r, "rref": R, "steps": steps}
+    R, pivots, _ = gauss_jordan(np.hstack([A, np.eye(3)]), 3)
+    if len(pivots) < 3:
+        raise ValueError("A has no inverse because det(A) = 0.")
+    return R[:, 3:]

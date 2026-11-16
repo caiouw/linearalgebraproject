@@ -1,92 +1,85 @@
 """Plain-language explanations of each result, for people who don't know linear algebra."""
 import textwrap
 
-import numpy as np
-
-from . import linalg
 from .data import NUTRIENTS
-
-UNITS = ["kcal", "g protein", "g carbs"]
 
 
 def wrap(text, indent="  "):
-    """Wrap a paragraph to the terminal width."""
+    """Wrap a paragraph so it fits the terminal."""
     return textwrap.fill(" ".join(text.split()), width=76,
                          initial_indent=indent, subsequent_indent=indent)
 
 
 def plain_words(text):
-    """An 'In plain words' note printed under a maths step."""
+    """Print an 'In plain words' note under a maths step."""
     print(wrap("In plain words: " + text, indent="  | "))
 
 
 def equations(A, b, food_names):
-    """The system Ax = b written out as three everyday equations."""
+    """Write Ax = b out as three everyday equations, one per nutrient."""
     lines = ["Unknowns (servings to find):"]
-    lines += [f"  x{j+1} = servings of {name}" for j, name in enumerate(food_names)]
+    for j in range(3):
+        lines.append(f"  x{j+1} = servings of {food_names[j]}")
     lines.append("")
-    lines.append("One equation per nutrient (row of A times x = target):")
-    for i, nutrient in enumerate(NUTRIENTS):
-        terms = " + ".join(f"{A[i, j]:g}*x{j+1}" for j in range(A.shape[1]))
-        lines.append(f"  {terms} = {b[i]:g}   <- {nutrient}")
+    lines.append("One equation per nutrient:")
+    for i in range(3):
+        left = f"{A[i, 0]:g}*x1 + {A[i, 1]:g}*x2 + {A[i, 2]:g}*x3"
+        lines.append(f"  {left} = {b[i]:g}   <- {NUTRIENTS[i]}")
     return "\n".join(lines)
 
 
 def story(food_names, result):
-    """Explain what the plan_meal() result means, in plain language."""
-    out = []
-    kind, rank, det = result["kind"], result["rank"], result["det"]
+    """Explain a plan_meal() result in plain language."""
+    if result["kind"] == "none":
+        return "\n\n".join([
+            wrap(f"Your foods overlap: one of them is just a mix of the others "
+                 f"(det(A) = 0, rank(A) = {result['rank']}), so only {result['rank']} "
+                 f"of your 3 foods are truly different."),
+            wrap("These foods can only reach some nutrient totals (their span is a plane), "
+                 "and your target is not one of them. There is NO plan. Swap one food."),
+        ])
 
-    if kind != linalg.UNIQUE:
-        out.append(wrap(
-            f"Your foods overlap: one of them is just a mix of the others, so it adds nothing "
-            f"new. Maths check: det(A) = 0 and rank(A) = {rank}, meaning only {rank} of your "
-            f"3 foods are truly different."))
-        if kind == linalg.NONE:
-            out.append(wrap(
-                "Because of that, these foods can only reach some nutrient totals (in maths: "
-                "their span is a plane, not all of 3D space), and your target is not one of "
-                "them. There is NO plan. Swap one food for a different one."))
-        else:
-            out.append(wrap(
-                "Your target happens to be reachable, but in MANY different ways, because you "
-                "can trade the 'mixed' food for its ingredients without changing the nutrients "
-                "(in maths: the null space is not just zero). Pick the cheapest one, or swap a "
-                "food to get a single answer."))
-        return "\n\n".join(out)
+    if result["kind"] == "infinitely many":
+        return "\n\n".join([
+            wrap(f"Your foods overlap: one of them is just a mix of the others "
+                 f"(det(A) = 0, rank(A) = {result['rank']})."),
+            wrap("Your target can still be reached, but in MANY different ways, because "
+                 "the mixed food can be traded for its ingredients. Pick the cheapest one, "
+                 "or swap a food to get a single answer."),
+        ])
 
-    out.append(wrap(
-        f"Your 3 foods are different enough from each other (det(A) = {det:,.0f}, which is "
-        f"not 0), so there is exactly ONE combination of servings that hits your target."))
+    parts = [wrap(f"Your 3 foods are different enough from each other (det(A) = "
+                  f"{result['det']:,.0f}, which is not 0), so there is exactly ONE "
+                  f"combination of servings that hits your target.")]
 
     x, c = result["x"], result["c"]
-    negative = [(name, xi) for name, xi in zip(food_names, x) if xi < -linalg.TOL]
-    if negative:
-        for name, xi in negative:
-            out.append(wrap(
-                f"That combination needs {xi:.2f} servings of {name}. A negative amount means "
-                f"you would have to take that food AWAY from the meal, which is impossible."))
-        out.append(wrap(
-            "Result: NOT POSSIBLE with these foods. Try swapping "
-            + " / ".join(n for n, _ in negative)
-            + " for a different food, or change your target."))
-        return "\n\n".join(out)
+    if result["verdict"] == "Not feasible (negative servings)":
+        for name, servings in zip(food_names, x):
+            if servings < 0:
+                parts.append(wrap(
+                    f"That combination needs {servings:.2f} servings of {name}. A negative "
+                    f"amount means taking that food AWAY from the meal, which is impossible."))
+        parts.append(wrap("Result: NOT POSSIBLE with these foods. Swap a food or change "
+                          "your target."))
+        return "\n\n".join(parts)
 
-    meal = ["  Your meal:"]
-    for name, xi, ci in zip(food_names, x, c):
-        meal.append(f"    {xi:5.2f} x {name:<26} ₱{xi * ci:6.2f}")
-    meal.append(f"    {'':5}   {'Total cost':<26} ₱{result['cost']:6.2f}")
-    out.append("\n".join(meal))
+    meal = "  Your meal:\n"
+    for name, servings, price in zip(food_names, x, c):
+        meal += f"    {servings:5.2f} x {name:<26} ₱{servings * price:6.2f}\n"
+    meal += f"            {'Total cost':<26} ₱{result['cost']:6.2f}"
+    parts.append(meal)
 
-    budget = result.get("budget")
+    budget = result["budget"]
     if result["verdict"] == "Over budget":
-        out.append(wrap(
-            f"Result: the meal works, but it costs ₱{result['cost'] - budget:.2f} more than "
-            f"your ₱{budget:g} budget. Try cheaper foods."))
+        parts.append(wrap(f"Result: the meal works, but it costs ₱{result['cost'] - budget:.2f} "
+                          f"more than your ₱{budget:g} budget. Try cheaper foods."))
+    elif budget is not None:
+        parts.append(wrap(f"Result: this meal hits your target exactly and fits your "
+                          f"₱{budget:g} budget."))
     else:
-        tail = f" and fits your ₱{budget:g} budget" if budget is not None else ""
-        out.append(wrap(f"Result: this meal hits your target exactly{tail}."))
+        parts.append(wrap("Result: this meal hits your target exactly."))
+
     check = result["A"] @ x
-    out.append(wrap("Check (A times x gives back the target): "
-                    + ", ".join(f"{v:.0f} {u}" for v, u in zip(check, UNITS))))
-    return "\n\n".join(out)
+    parts.append(wrap(f"Check (A times x gives back the target): {check[0]:.0f} kcal, "
+                      f"{check[1]:.0f} g protein, {check[2]:.0f} g carbs"))
+    return "\n\n".join(parts)
